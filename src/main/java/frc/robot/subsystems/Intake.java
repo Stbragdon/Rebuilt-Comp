@@ -1,72 +1,145 @@
 package frc.robot.subsystems;
 
-import com.revrobotics.spark.SparkMax;
-import com.revrobotics.spark.SparkLowLevel.MotorType;
-import com.revrobotics.spark.config.SparkMaxConfig;
-import com.revrobotics.spark.config.SparkBaseConfig;
 import com.revrobotics.spark.SparkBase;
+import com.revrobotics.spark.SparkLowLevel.MotorType;
+import com.revrobotics.spark.SparkMax;
+import com.revrobotics.spark.config.SparkBaseConfig;
+import com.revrobotics.spark.config.SparkMaxConfig;
 
+import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 public class Intake extends SubsystemBase {
 
-    // --- CONFIG ---
-    private static final int LEADER_CAN_ID = 51;
-    private static final int FOLLOWER_CAN_ID = 52;
+    // --- CHANGE THESE TO YOUR REAL CAN IDS ---
+    private static final int ARM_CAN_ID = 31;      // raises / lowers intake
+    private static final int ROLLER_CAN_ID = 30;   // spins intake roller
 
     // motors
-    private final SparkMax leader;
-    private final SparkMax follower;
-
+    private final SparkMax armMotor;
+    private final SparkMax rollerMotor;
 
     public Intake() {
-        leader = new SparkMax(LEADER_CAN_ID, MotorType.kBrushless);
-        follower = new SparkMax(FOLLOWER_CAN_ID, MotorType.kBrushless);
+        armMotor = new SparkMax(ARM_CAN_ID, MotorType.kBrushless);
+        rollerMotor = new SparkMax(ROLLER_CAN_ID, MotorType.kBrushless);
 
-        // configure leader
-        leader.setVoltage(0.0);
-        var leaderConfig = new SparkMaxConfig();
-        leaderConfig.inverted(true);                         // adapt if your motor is reversed
-        leaderConfig.idleMode(SparkBaseConfig.IdleMode.kBrake); // brake is generally safer with hard stops
-        leaderConfig.smartCurrentLimit(30);
-        leaderConfig.voltageCompensation(12);
-        leader.configure(leaderConfig, SparkBase.ResetMode.kResetSafeParameters, SparkBase.PersistMode.kPersistParameters);
+        // --- Arm motor config ---
+        SparkMaxConfig armConfig = new SparkMaxConfig();
+        armConfig.inverted(true); // flip if arm moves wrong direction
+        armConfig.idleMode(SparkBaseConfig.IdleMode.kBrake);
+        armConfig.smartCurrentLimit(30);
+        armConfig.voltageCompensation(12);
 
-        // configure follower to follow the leader
-        var followerConfig = new SparkMaxConfig();
-        followerConfig.inverted(true).idleMode(SparkBaseConfig.IdleMode.kBrake).smartCurrentLimit(30).voltageCompensation(12);
-        // follow by CAN ID:
-        followerConfig.follow(LEADER_CAN_ID, true);
-        // alternative: if your SDK supports object follow, you can use follower.follow(leader, true);
+        armMotor.configure(
+            armConfig,
+            SparkBase.ResetMode.kResetSafeParameters,
+            SparkBase.PersistMode.kPersistParameters
+        );
 
-        follower.configure(followerConfig, SparkBase.ResetMode.kResetSafeParameters, SparkBase.PersistMode.kPersistParameters);
+        // --- Roller motor config ---
+        SparkMaxConfig rollerConfig = new SparkMaxConfig();
+        rollerConfig.inverted(false); // flip if intake spins wrong way
+        rollerConfig.idleMode(SparkBaseConfig.IdleMode.kCoast);
+        rollerConfig.smartCurrentLimit(30);
+        rollerConfig.voltageCompensation(12);
+
+        rollerMotor.configure(
+            rollerConfig,
+            SparkBase.ResetMode.kResetSafeParameters,
+            SparkBase.PersistMode.kPersistParameters
+        );
+
+        stopArm();
+        stopRoller();
     }
 
-    // --- public control helpers ---
+    // ---------------- ARM METHODS ----------------
 
-    /** Set voltage directly (volts). No limit-switch checks (mechanical stops are assumed). */
-    public void setVoltage(double volts) {
-        leader.setVoltage(volts);
+    /** Set arm motor voltage directly */
+    public void setArmVoltage(double volts) {
+        armMotor.setVoltage(volts);
     }
 
-    /** Set motor by percent output (-1.0 .. 1.0). This uses 12 V as full scale. */
-    public void setPercent(double percent) {
-        double volts = percent * 12.0;
-        setVoltage(volts);
+    /** Set arm motor percent output (-1.0 to 1.0) */
+    public void setArmPercent(double percent) {
+        setArmVoltage(percent * 12.0);
     }
 
-    /** Convenience: start lowering with a fixed percent (negative or positive depending on motor wiring). */
-    public void lower(double percent) {
-        setPercent(percent);
+    public void raise(double volts) {
+        setArmVoltage(volts);
     }
 
-    /** Convenience: start raising with a fixed percent. */
-    public void raise(double percent) {
-        setPercent(percent);
+    public void lower(double volts) {
+        setArmVoltage(volts);
     }
 
-    /** Stops the arm. */
+    public void stopArm() {
+        armMotor.setVoltage(0.0);
+    }
+
+    // ---------------- ROLLER METHODS ----------------
+
+    /** Set roller motor voltage directly */
+    public void setRollerVoltage(double volts) {
+        rollerMotor.setVoltage(volts);
+    }
+
+    /** Set roller motor percent output (-1.0 to 1.0) */
+    public void setRollerPercent(double percent) {
+        setRollerVoltage(percent * 12.0);
+    }
+
+    /** Pull game pieces in */
+    public void intake(double volts) {
+        setRollerVoltage(-volts);
+    }
+
+    /** Push game pieces out */
+    public void outtake(double volts) {
+        setRollerVoltage(volts);
+    }
+
+    public void stopRoller() {
+        rollerMotor.setVoltage(0.0);
+    }
+
+    // ---------------- STOP EVERYTHING ----------------
+
     public void stop() {
-        leader.setVoltage(0.0);
+        stopArm();
+        stopRoller();
+    }
+
+    // ---------- COMMANDS ----------
+    public Command raiseCommand(double volts) {
+        return runEnd(
+            () -> raise(volts),
+            this::stopArm
+        );
+    }
+
+    public Command lowerCommand(double volts) {
+        return runEnd(
+            () -> lower(-Math.abs(volts)),
+            this::stopArm
+        );
+    }
+
+    public Command intakeCommand(double volts) {
+        return runEnd(
+            () -> intake(volts),
+            this::stopRoller
+        );
+    }
+
+    public Command outtakeCommand(double volts) {
+        return runEnd(
+            () -> outtake(volts),
+            this::stopRoller
+        );
+    }
+
+    public Command stopCommand() {
+        return runOnce(this::stop);
     }
 }

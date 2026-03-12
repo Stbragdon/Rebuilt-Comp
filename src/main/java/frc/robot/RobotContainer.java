@@ -17,6 +17,7 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import frc.robot.Constants.OperatorConstants;
+import frc.robot.subsystems.Intake;
 import frc.robot.subsystems.SwerveSubsystem;
 import java.io.File;
 
@@ -34,8 +35,13 @@ public class RobotContainer
   // Replace with CommandPS4Controller or CommandJoystick if needed
   final         CommandXboxController driverXbox = new CommandXboxController(0);
   // The robot's subsystems and commands are defined here...
+
+  // Swerve subsystem
   private final SwerveSubsystem       drivebase  = new SwerveSubsystem(new File(Filesystem.getDeployDirectory(),
                                                                                 "swerve"));
+
+  // Intake subsystem
+  private final Intake intake = new Intake();
 
   // Establish a Sendable Chooser that will be able to be sent to the SmartDashboard, allowing selection of desired auto
   private final SendableChooser<Command> autoChooser;
@@ -104,6 +110,12 @@ public class RobotContainer
     
     //Create the NamedCommands that will be used in PathPlanner
     NamedCommands.registerCommand("test", Commands.print("I EXIST"));
+    NamedCommands.registerCommand("ArmUp",intake.raiseCommand(4).withTimeout(0.5));
+    NamedCommands.registerCommand("ArmDown",intake.lowerCommand(4).withTimeout(0.5));
+    NamedCommands.registerCommand("IntakeOn",intake.intakeCommand(6).withTimeout(1.0));
+    NamedCommands.registerCommand("Outtake",intake.outtakeCommand(6).withTimeout(0.5));
+    NamedCommands.registerCommand("StopIntake",intake.stopCommand());
+    
 
     //Have the autoChooser pull in all PathPlanner autos as options
     autoChooser = AutoBuilder.buildAutoChooser();
@@ -148,9 +160,12 @@ public class RobotContainer
 
       driverXbox.a().onTrue((Commands.runOnce(drivebase::zeroGyro)));
       driverXbox.x().onTrue(Commands.runOnce(drivebase::addFakeVisionReading));
-      driverXbox.start().whileTrue(Commands.none());
+      driverXbox.povUp().whileTrue(Commands.run(() -> intake.raise(4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
+      driverXbox.povDown().whileTrue(Commands.run(() -> intake.lower(-4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
+      driverXbox.rightTrigger(0.2).whileTrue(Commands.run(() -> intake.intake(12), intake)).onFalse(Commands.runOnce(() -> intake.stopRoller(), intake));
+      driverXbox.leftTrigger(0.2).whileTrue(Commands.run(() -> intake.outtake(12), intake)).onFalse(Commands.runOnce(() -> intake.stopRoller(), intake));
       driverXbox.back().whileTrue(Commands.none());
-      driverXbox.leftBumper().whileTrue(Commands.runOnce(drivebase::lock, drivebase).repeatedly());
+      //driverXbox.leftBumper().whileTrue(Commands.runOnce(drivebase::lock, drivebase).repeatedly());
       driverXbox.rightBumper().onTrue(Commands.none());
     
 
@@ -164,7 +179,8 @@ public class RobotContainer
   public Command getAutonomousCommand()
   {
     // Pass in the selected auto from the SmartDashboard as our desired autnomous commmand 
-    return autoChooser.getSelected();
+    //return autoChooser.getSelected();
+    return drivebase.getAutonomousCommand("New Auto");
   }
 
   public void setMotorBrake(boolean brake)
