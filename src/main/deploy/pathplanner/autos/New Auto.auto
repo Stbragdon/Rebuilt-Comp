@@ -9,18 +9,6 @@
           "data": {
             "pathName": "Example Path"
           }
-        },
-        {
-          "type": "named",
-          "data": {
-            "name": "ArmDown"
-          }
-        },
-        {
-          "type": "named",
-          "data": {
-            "name": "IntakeOn"
-          }
         }
       ]
     }

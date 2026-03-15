@@ -40,7 +40,7 @@ public class Intake extends SubsystemBase {
         SparkMaxConfig rollerConfig = new SparkMaxConfig();
         rollerConfig.inverted(false); // flip if intake spins wrong way
         rollerConfig.idleMode(SparkBaseConfig.IdleMode.kCoast);
-        rollerConfig.smartCurrentLimit(30);
+        rollerConfig.smartCurrentLimit(80);
         rollerConfig.voltageCompensation(12);
 
         rollerMotor.configure(
@@ -91,11 +91,6 @@ public class Intake extends SubsystemBase {
 
     /** Pull game pieces in */
     public void intake(double volts) {
-        setRollerVoltage(-volts);
-    }
-
-    /** Push game pieces out */
-    public void outtake(double volts) {
         setRollerVoltage(volts);
     }
 
@@ -128,13 +123,6 @@ public class Intake extends SubsystemBase {
     public Command intakeCommand(double volts) {
         return runEnd(
             () -> intake(volts),
-            this::stopRoller
-        );
-    }
-
-    public Command outtakeCommand(double volts) {
-        return runEnd(
-            () -> outtake(volts),
             this::stopRoller
         );
     }

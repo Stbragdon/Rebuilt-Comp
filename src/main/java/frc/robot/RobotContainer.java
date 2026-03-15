@@ -18,8 +18,12 @@ import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import frc.robot.Constants.OperatorConstants;
 import frc.robot.subsystems.Intake;
+import frc.robot.subsystems.Shooter;
+import frc.robot.subsystems.Shooter.ShotPreset;
 import frc.robot.subsystems.SwerveSubsystem;
 import java.io.File;
+
+import org.photonvision.PhotonCamera;
 
 import swervelib.SwerveInputStream;
 
@@ -31,7 +35,7 @@ import swervelib.SwerveInputStream;
 public class RobotContainer
 {
 
- 
+  private final PhotonCamera camera = new PhotonCamera("Target");
   // Replace with CommandPS4Controller or CommandJoystick if needed
   final         CommandXboxController driverXbox = new CommandXboxController(0);
   // The robot's subsystems and commands are defined here...
@@ -42,6 +46,9 @@ public class RobotContainer
 
   // Intake subsystem
   private final Intake intake = new Intake();
+
+  // Shooter subsystem
+  private final Shooter shooter = new Shooter();
 
   // Establish a Sendable Chooser that will be able to be sent to the SmartDashboard, allowing selection of desired auto
   private final SendableChooser<Command> autoChooser;
@@ -109,11 +116,9 @@ public class RobotContainer
     DriverStation.silenceJoystickConnectionWarning(true);
     
     //Create the NamedCommands that will be used in PathPlanner
-    NamedCommands.registerCommand("test", Commands.print("I EXIST"));
     NamedCommands.registerCommand("ArmUp",intake.raiseCommand(4).withTimeout(0.5));
     NamedCommands.registerCommand("ArmDown",intake.lowerCommand(4).withTimeout(0.5));
-    NamedCommands.registerCommand("IntakeOn",intake.intakeCommand(6).withTimeout(1.0));
-    NamedCommands.registerCommand("Outtake",intake.outtakeCommand(6).withTimeout(0.5));
+    NamedCommands.registerCommand("IntakeOn",intake.intakeCommand(6).withTimeout(10.0));
     NamedCommands.registerCommand("StopIntake",intake.stopCommand());
     
 
@@ -158,15 +163,18 @@ public class RobotContainer
       drivebase.setDefaultCommand(driveFieldOrientedAnglularVelocity);
     }
 
-      driverXbox.a().onTrue((Commands.runOnce(drivebase::zeroGyro)));
-      driverXbox.x().onTrue(Commands.runOnce(drivebase::addFakeVisionReading));
+      //driverXbox.a().onTrue((Commands.runOnce(drivebase::zeroGyro)));
+      //driverXbox.x().onTrue(Commands.runOnce(drivebase::addFakeVisionReading));
       driverXbox.povUp().whileTrue(Commands.run(() -> intake.raise(4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
       driverXbox.povDown().whileTrue(Commands.run(() -> intake.lower(-4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
       driverXbox.rightTrigger(0.2).whileTrue(Commands.run(() -> intake.intake(12), intake)).onFalse(Commands.runOnce(() -> intake.stopRoller(), intake));
-      driverXbox.leftTrigger(0.2).whileTrue(Commands.run(() -> intake.outtake(12), intake)).onFalse(Commands.runOnce(() -> intake.stopRoller(), intake));
+      driverXbox.b().whileTrue(drivebase.aimAtTagTeleopCommand(driverXbox, camera, 1));
+      //driverXbox.a().whileTrue(Commands.run(() -> shooter.setShooter(5.6), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));
+      //driverXbox.b().whileTrue(Commands.run(() -> shooter.setShooter(5.8), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));;
+      driverXbox.y().whileTrue(Commands.run(() -> shooter.setShooter(6.3), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));;
       driverXbox.back().whileTrue(Commands.none());
       //driverXbox.leftBumper().whileTrue(Commands.runOnce(drivebase::lock, drivebase).repeatedly());
-      driverXbox.rightBumper().onTrue(Commands.none());
+      driverXbox.rightBumper().whileTrue(Commands.run(() -> shooter.runKicker(5), shooter)).onFalse(Commands.runOnce(() -> shooter.stopKicker(), shooter));
     
 
   }
