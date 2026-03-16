@@ -25,12 +25,14 @@ import edu.wpi.first.math.trajectory.Trajectory;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Config;
 import frc.robot.Constants;
+import frc.robot.subsystems.Shooter.ShotPreset;
 import frc.robot.subsystems.Vision.Cameras;
 import java.io.File;
 import java.io.IOException;
@@ -71,6 +73,9 @@ public class SwerveSubsystem extends SubsystemBase {
    */
   private       Vision      vision;
 
+  private boolean aimTargetVisible = true;
+  private double aimTargetYawDeg = 0.0;
+
   /**
    * Initialize {@link SwerveDrive} with the directory provided.
    *
@@ -91,7 +96,7 @@ public class SwerveSubsystem extends SubsystemBase {
                                                                       Meter.of(4)),
                                                     Rotation2d.fromDegrees(180));
     // Configure the Telemetry before creating the SwerveDrive to avoid unnecessary objects being created.
-    SwerveDriveTelemetry.verbosity = TelemetryVerbosity.HIGH; // TURN OFF OR LOW AT COMPETITION
+    //SwerveDriveTelemetry.verbosity = TelemetryVerbosity.LOW; // TURN OFF OR LOW AT COMPETITION
     try
     {
       swerveDrive = new SwerveParser(directory).createSwerveDrive(Constants.MAX_SPEED, startingPose);
@@ -786,4 +791,62 @@ return this.run(() -> {
 }).withName("AimAtTagTeleop_" + tagId);
 }
 
+/**
+* Auto / PathPlanner command that ONLY aims at a tag (no driving forward).
+*
+* @param camera PhotonCamera to use
+* @param tagId  AprilTag ID to aim at
+* NEEDS TUNING
+*/
+public Command aimAtTagCommand(PhotonCamera camera, int tagId) {
+
+return Commands.run(() -> {
+
+  double turn = 0.0;
+  boolean targetVisible = false;
+  double targetYawDeg = 0.0;
+
+  // ---- Get vision results ----
+  var results = camera.getAllUnreadResults();
+  if (!results.isEmpty()) {
+      var result = results.get(results.size() - 1); // latest frame
+      if (result.hasTargets()) {
+          for (PhotonTrackedTarget target : result.getTargets()) {
+              if (target.getFiducialId() == tagId) {
+                  targetYawDeg = target.getYaw();
+                  targetVisible = true;
+                  break;
+              }
+          }
+      }
+  }
+
+  // Save for .until(...)
+  aimTargetVisible = targetVisible;
+  aimTargetYawDeg  = targetYawDeg;
+
+  // ---- Rotation-only P controller ----
+  if (targetVisible && Math.abs(targetYawDeg) > 1.5) {
+      double turnCommand = targetYawDeg * 0.015;
+      turnCommand = MathUtil.clamp(turnCommand, -1.0, 1.0);
+      turn = turnCommand * Constants.MAX_ANGULAR_VELOCITY;
+  } else {
+      turn = 0.0; // Close enough or no target
+  }
+
+  // ---- Drive rotation only, no translation ----
+  Translation2d translation = new Translation2d(0.0, 0.0);
+  boolean fieldRelative = false; // robot-relative turn
+
+  drive(translation, turn, fieldRelative);
+
+  // Debug (optional)
+  SmartDashboard.putBoolean("AimAtTag Visible", targetVisible);
+  SmartDashboard.putNumber("AimAtTag Yaw", targetYawDeg);
+
+}, this)
+.until(() -> aimTargetVisible && Math.abs(aimTargetYawDeg) < 1.5)
+.withTimeout(2.0)   // safety timeout
+.withName("AimAtTag_" + tagId);
+}
 }

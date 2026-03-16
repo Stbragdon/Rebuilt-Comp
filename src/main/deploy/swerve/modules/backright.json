@@ -3,7 +3,7 @@
     "front": -10.25,
     "left": -10.25
   },
-  "absoluteEncoderOffset": 0,
+  "absoluteEncoderOffset": 114.6,
   "drive": {
     "type": "sparkmax_neo",
     "id": 7,
@@ -15,7 +15,7 @@
     "canbus": null
   },
   "encoder": {
-    "type": "none",
+    "type": "cancoder",
     "id": 37,
     "canbus": null
   },

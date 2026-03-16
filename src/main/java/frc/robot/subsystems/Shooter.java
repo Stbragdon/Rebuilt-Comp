@@ -1,32 +1,41 @@
 package frc.robot.subsystems;
 
-import com.revrobotics.ResetMode;
+import java.util.Optional;
+
+import org.photonvision.PhotonCamera;
+import org.photonvision.targeting.PhotonTrackedTarget;
+
 import com.revrobotics.PersistMode;
 import com.revrobotics.RelativeEncoder;
-import com.revrobotics.spark.ClosedLoopSlot;
-import com.revrobotics.spark.SparkBase;
-import com.revrobotics.spark.SparkClosedLoopController;
-import com.revrobotics.spark.SparkMax;
+import com.revrobotics.ResetMode;
 import com.revrobotics.spark.SparkLowLevel.MotorType;
-import com.revrobotics.spark.config.ClosedLoopConfig;
+import com.revrobotics.spark.SparkFlex;
+import com.revrobotics.spark.SparkMax;
 import com.revrobotics.spark.config.EncoderConfig;
 import com.revrobotics.spark.config.SparkMaxConfig;
 
+import edu.wpi.first.math.util.Units;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 public class Shooter extends SubsystemBase {
 
     public enum ShotPreset {
-        CLOSE(5),
-        MID(7),
-        FAR(9),
-        SNOWBLOW(10);
+        CLOSE(5.0, 4.0, 6.5),
+        MID(7.0, 6.5, 9.5),
+        FAR(9.0, 9.5, 13.0),
+        SNOWBLOW(10.0, 13.0, 18.0);
 
         public final double volts;
+        public final double minFeet;
+        public final double maxFeet;
 
-        ShotPreset(double volts) {
+        ShotPreset(double volts, double minFeet, double maxFeet) {
             this.volts = volts;
+            this.minFeet = minFeet;
+            this.maxFeet = maxFeet;
         }
     }
 
@@ -34,29 +43,20 @@ public class Shooter extends SubsystemBase {
     private static final int SHOOTER_CAN_ID = 20;
     private static final int KICKER_CAN_ID = 21;
 
+    // ===== Vision =====
+    private final PhotonCamera camera = new PhotonCamera("Target");
+
+    // Change this to the actual AprilTag ID you want to shoot from
+    private static final int HUB_TAG_ID = 1;
+
     // ===== Hardware =====
-    private final SparkMax shooterMotor = new SparkMax(SHOOTER_CAN_ID, MotorType.kBrushless);
-    private final SparkMax kickerMotor  = new SparkMax(KICKER_CAN_ID, MotorType.kBrushless);
+    private final SparkFlex shooterMotor = new SparkFlex(SHOOTER_CAN_ID, MotorType.kBrushless);
+    private final SparkFlex kickerMotor = new SparkFlex(KICKER_CAN_ID, MotorType.kBrushless);
+    
 
-    private final RelativeEncoder shooterEncoder = shooterMotor.getEncoder();
-    private final SparkClosedLoopController shooterController = shooterMotor.getClosedLoopController();
-
-    // ===== Tuning =====
-    // Start here and tune on the robot
-    private static final double kP = 0.01;
-    private static final double kI = 0.0;
-    private static final double kD = 0.0;
-
-    // Use tolerance in RPM for "ready to shoot
-    private static final double RPM_TOLERANCE = 500.0;
-
-    // Kicker voltage
+    // ===== Constants =====
     private static final double KICKER_FEED_VOLTS = 8.0;
-
-    // Optional shooter spin-up fallback voltage if you want manual mode later
     private static final double IDLE_HOLD_VOLTS = 0.0;
-
-    private double targetRPM = 0.0;
 
     public Shooter() {
         configureShooterMotor();
@@ -72,11 +72,9 @@ public class Shooter extends SubsystemBase {
             .inverted(true);
 
         EncoderConfig encoderConfig = new EncoderConfig();
-        // Native velocity is RPM by default, so this can stay 1.0
         encoderConfig.velocityConversionFactor(1.0);
         encoderConfig.positionConversionFactor(1.0);
 
-    
         config.apply(encoderConfig);
 
         shooterMotor.configure(
@@ -107,21 +105,12 @@ public class Shooter extends SubsystemBase {
         shooterMotor.setVoltage(volts);
     }
 
+    public void setShooterPreset(ShotPreset preset) {
+        shooterMotor.setVoltage(preset.volts);
+    }
+
     public void stopShooter() {
-        targetRPM = 0.0;
         shooterMotor.setVoltage(IDLE_HOLD_VOLTS);
-    }
-
-    public double getShooterRPM() {
-        return shooterEncoder.getVelocity();
-    }
-
-    public double getTargetRPM() {
-        return targetRPM;
-    }
-
-    public boolean atTargetSpeed() {
-        return Math.abs(getShooterRPM() - targetRPM) <= RPM_TOLERANCE;
     }
 
     // ===== Kicker controls =====
@@ -129,6 +118,7 @@ public class Shooter extends SubsystemBase {
     public void runKicker(double volts) {
         kickerMotor.setVoltage(volts);
     }
+
     public void feedBall() {
         kickerMotor.setVoltage(KICKER_FEED_VOLTS);
     }
@@ -142,10 +132,104 @@ public class Shooter extends SubsystemBase {
         stopKicker();
     }
 
+    // ===== Vision / Distance =====
+
+    public double getDistanceFromAprilTag(int tagId) {
+        var result = camera.getLatestResult();
+
+        if (!result.hasTargets()) {
+            return -1.0;
+        }
+
+        for (PhotonTrackedTarget target : result.getTargets()) {
+            if (target.getFiducialId() == tagId) {
+                double distanceMeters =
+                    target.getBestCameraToTarget().getTranslation().getNorm();
+
+                return Units.metersToFeet(distanceMeters);
+            }
+        }
+
+        return -1.0;
+    }
+
+    private int getHubTagID() {
+    var alliance = DriverStation.getAlliance();
+
+    if (alliance.isPresent()) {
+        if (alliance.get() == Alliance.Red) {
+            return 7;
+        } else {
+            return 25;
+        }
+    }
+
+    // fallback if DS hasn't reported alliance yet
+    return 7;
+}
+
+    public double getHubDistanceFeet() {
+        return getDistanceFromAprilTag(HUB_TAG_ID);
+    }
+
+    public boolean hasHubTag() {
+        return getDistanceFromAprilTag(HUB_TAG_ID) > 0;
+    }
+
+    // ===== Shot Logic =====
+
+    public boolean inRange(double distanceFeet, ShotPreset preset) {
+        if (distanceFeet < 0) {
+            return false;
+        }
+
+        return distanceFeet >= preset.minFeet && distanceFeet < preset.maxFeet;
+    }
+
+    public Optional<ShotPreset> getPresetForDistance(double distanceFeet) {
+        if (distanceFeet < 0) {
+            return Optional.empty();
+        }
+
+        for (ShotPreset preset : ShotPreset.values()) {
+            if (inRange(distanceFeet, preset)) {
+                return Optional.of(preset);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    public boolean isInAnyShotRange(double distanceFeet) {
+        return getPresetForDistance(distanceFeet).isPresent();
+    }
+
+    public void applyAutoShotFromDistance() {
+        double distanceFeet = getHubDistanceFeet();
+        Optional<ShotPreset> preset = getPresetForDistance(distanceFeet);
+
+        if (preset.isPresent()) {
+            setShooterPreset(preset.get());
+        } else {
+            stopShooter();
+        }
+    }
+
     @Override
     public void periodic() {
-        SmartDashboard.putNumber("Shooter RPM", getShooterRPM());
-        SmartDashboard.putNumber("Shooter Target RPM", targetRPM);
-        SmartDashboard.putBoolean("Shooter At Speed", atTargetSpeed());
+        double distanceFeet = getHubDistanceFeet();
+        Optional<ShotPreset> currentPreset = getPresetForDistance(distanceFeet);
+        SmartDashboard.putNumber("Distance To Hub Tag (ft)", distanceFeet);
+        SmartDashboard.putBoolean("Close Ready", inRange(distanceFeet, ShotPreset.CLOSE));
+        SmartDashboard.putBoolean("Mid Ready", inRange(distanceFeet, ShotPreset.MID));
+        SmartDashboard.putBoolean("Far Ready", inRange(distanceFeet, ShotPreset.FAR));
+        
+        if (currentPreset.isPresent()) {
+            SmartDashboard.putString("Active Shot Preset", currentPreset.get().name());
+            SmartDashboard.putNumber("Suggested Shooter Volts", currentPreset.get().volts);
+        } else {
+            SmartDashboard.putString("Active Shot Preset", "NONE");
+            SmartDashboard.putNumber("Suggested Shooter Volts", 0.0);
+        }
     }
 }

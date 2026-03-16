@@ -19,12 +19,9 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
 import frc.robot.Constants.OperatorConstants;
 import frc.robot.subsystems.Intake;
 import frc.robot.subsystems.Shooter;
-import frc.robot.subsystems.Shooter.ShotPreset;
 import frc.robot.subsystems.SwerveSubsystem;
 import java.io.File;
-
 import org.photonvision.PhotonCamera;
-
 import swervelib.SwerveInputStream;
 
 /**
@@ -38,6 +35,8 @@ public class RobotContainer
   private final PhotonCamera camera = new PhotonCamera("Target");
   // Replace with CommandPS4Controller or CommandJoystick if needed
   final         CommandXboxController driverXbox = new CommandXboxController(0);
+  final         CommandXboxController coDriverXbox = new CommandXboxController(1);
+
   // The robot's subsystems and commands are defined here...
 
   // Swerve subsystem
@@ -163,18 +162,19 @@ public class RobotContainer
       drivebase.setDefaultCommand(driveFieldOrientedAnglularVelocity);
     }
 
-      //driverXbox.a().onTrue((Commands.runOnce(drivebase::zeroGyro)));
-      //driverXbox.x().onTrue(Commands.runOnce(drivebase::addFakeVisionReading));
-      driverXbox.povUp().whileTrue(Commands.run(() -> intake.raise(4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
-      driverXbox.povDown().whileTrue(Commands.run(() -> intake.lower(-4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
-      driverXbox.rightTrigger(0.2).whileTrue(Commands.run(() -> intake.intake(12), intake)).onFalse(Commands.runOnce(() -> intake.stopRoller(), intake));
+      // DRIVER CONTROL
+      driverXbox.a().onTrue((Commands.runOnce(drivebase::zeroGyro)));
       driverXbox.b().whileTrue(drivebase.aimAtTagTeleopCommand(driverXbox, camera, 1));
-      //driverXbox.a().whileTrue(Commands.run(() -> shooter.setShooter(5.6), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));
-      //driverXbox.b().whileTrue(Commands.run(() -> shooter.setShooter(5.8), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));;
-      driverXbox.y().whileTrue(Commands.run(() -> shooter.setShooter(6.3), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));;
-      driverXbox.back().whileTrue(Commands.none());
-      //driverXbox.leftBumper().whileTrue(Commands.runOnce(drivebase::lock, drivebase).repeatedly());
-      driverXbox.rightBumper().whileTrue(Commands.run(() -> shooter.runKicker(5), shooter)).onFalse(Commands.runOnce(() -> shooter.stopKicker(), shooter));
+      driverXbox.rightBumper().whileTrue(Commands.runOnce(drivebase::lock, drivebase).repeatedly());
+      // CO-DRIVER CONTROL
+      coDriverXbox.povUp().whileTrue(Commands.run(() -> intake.raise(4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
+      coDriverXbox.povDown().whileTrue(Commands.run(() -> intake.lower(-4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
+      coDriverXbox.rightTrigger(0.2).whileTrue(Commands.run(() -> intake.intake(12), intake)).onFalse(Commands.runOnce(() -> intake.stopRoller(), intake));
+      coDriverXbox.rightBumper().whileTrue(Commands.run(() -> shooter.runKicker(5), shooter)).onFalse(Commands.runOnce(() -> shooter.stopKicker(), shooter));
+      coDriverXbox.a().whileTrue(Commands.run(() -> shooter.applyAutoShotFromDistance(), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));
+      coDriverXbox.y().whileTrue(Commands.run(() -> shooter.setShooter(5.5), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));;
+      
+      
     
 
   }
@@ -195,4 +195,6 @@ public class RobotContainer
   {
     drivebase.setMotorBrake(brake);
   }
+
+  
 }
