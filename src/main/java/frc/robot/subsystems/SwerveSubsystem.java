@@ -32,7 +32,6 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Config;
 import frc.robot.Constants;
-import frc.robot.subsystems.Shooter.ShotPreset;
 import frc.robot.subsystems.Vision.Cameras;
 import java.io.File;
 import java.io.IOException;
@@ -53,8 +52,6 @@ import swervelib.math.SwerveMath;
 import swervelib.parser.SwerveControllerConfiguration;
 import swervelib.parser.SwerveDriveConfiguration;
 import swervelib.parser.SwerveParser;
-import swervelib.telemetry.SwerveDriveTelemetry;
-import swervelib.telemetry.SwerveDriveTelemetry.TelemetryVerbosity;
 
 public class SwerveSubsystem extends SubsystemBase {
 
@@ -66,7 +63,7 @@ public class SwerveSubsystem extends SubsystemBase {
   /**
    * Enable vision odometry updates while driving.
    */
-  private final boolean     visionDriveTest = true;
+  private final boolean     visionDriveTest = false;
  
   /**
    * PhotonVision class to keep an accurate odometry.
@@ -737,58 +734,81 @@ public class SwerveSubsystem extends SubsystemBase {
     return swerveDrive;
   }
 
-  // TELEOP WORKABLE VISION NEEDS TUNING
-   public Command aimAtTagTeleopCommand(
+// TELEOP WORKABLE VISION NEEDS TUNING
+public Command aimAtBestTagTeleopCommand(
     CommandXboxController controller,
-    PhotonCamera camera,
-    int tagId
+    PhotonCamera camera
 ) {
-return this.run(() -> {
+    return this.run(() -> {
 
-    // Driver keeps translation control
-    double forward = -controller.getLeftY() * Constants.MAX_SPEED;
-    double strafe  = -controller.getLeftX() * Constants.MAX_SPEED;
+        // ---- Driver translation control ----
+        double forward = controller.getLeftY() * Constants.MAX_SPEED;
+        double strafe  = controller.getLeftX() * Constants.MAX_SPEED;
 
-    double turn = 0.0;
+        double turn = 0.0;
 
-    boolean targetVisible = false;
-    double targetYawDeg = 0.0;
+        boolean targetVisible = false;
+        double targetYawDeg = 0.0;
 
-    // ---- Vision ----
-    var results = camera.getAllUnreadResults();
-    if (!results.isEmpty()) {
-        var result = results.get(results.size() - 1);
-        if (result.hasTargets()) {
-            for (PhotonTrackedTarget t : result.getTargets()) {
-                if (t.getFiducialId() == tagId) {
-                    targetYawDeg = t.getYaw();
+        // Tags we care about
+        int[] validTags = {8, 10, 11, 24, 26, 27};
+
+        // ---- Vision ----
+        var results = camera.getAllUnreadResults();
+        if (!results.isEmpty()) {
+            var result = results.get(results.size() - 1);
+
+            if (result.hasTargets()) {
+
+                PhotonTrackedTarget bestTarget = null;
+                double bestScore = Double.MAX_VALUE;
+
+                for (PhotonTrackedTarget t : result.getTargets()) {
+
+                    int id = t.getFiducialId();
+
+                    // Check if tag is one we want
+                    for (int validId : validTags) {
+                        if (id == validId) {
+
+                            // Score = how centered it is
+                            double score = Math.abs(t.getYaw());
+
+                            if (score < bestScore) {
+                                bestScore = score;
+                                bestTarget = t;
+                            }
+                        }
+                    }
+                }
+
+                if (bestTarget != null) {
+                    targetYawDeg = bestTarget.getYaw();
                     targetVisible = true;
-                    break;
                 }
             }
         }
-    }
 
-    // ---- Aim-only rotation control ----
-    final double kP = 0.012; // Pretty tight tune
-    final double yawDeadband = 1.5;
+        // ---- Aim-only rotation control ----
+        final double kP = 0.012;
+        final double yawDeadband = 1.5;
 
-    if (targetVisible && Math.abs(targetYawDeg) > yawDeadband) {
-        double turnCmd = targetYawDeg * kP;
-        turnCmd = MathUtil.clamp(turnCmd, -1.0, 1.0);
-        turn = turnCmd * Constants.MAX_ANGULAR_VELOCITY;
-    } else {
-        turn = 0;
-    }
+        if (targetVisible && Math.abs(targetYawDeg) > yawDeadband) {
+            double turnCmd = targetYawDeg * kP;
+            turnCmd = MathUtil.clamp(turnCmd, -1.0, 1.0);
+            turn = turnCmd * Constants.MAX_ANGULAR_VELOCITY;
+        } else {
+            turn = 0;
+        }
 
-    // ---- Drive with driver translation + vision rotation ----
-    drive(
-        new Translation2d(forward, strafe),
-        -turn,
-        false   // robot-relative to avoid field misalignments
-    );
+        // ---- Drive with driver translation + vision rotation ----
+        drive(
+            new Translation2d(forward, strafe),
+            -turn,
+            false // robot-relative
+        );
 
-}).withName("AimAtTagTeleop_" + tagId);
+    }).withName("AimAtBestTagTeleop");
 }
 
 /**

@@ -58,7 +58,7 @@ public class RobotContainer
   SwerveInputStream driveAngularVelocity = SwerveInputStream.of(drivebase.getSwerveDrive(),
                                                                 () -> driverXbox.getLeftY() * -1 * (driverXbox.leftBumper().getAsBoolean() ? 0.5 : 1.0),
                                                                 () -> driverXbox.getLeftX() * -1 * (driverXbox.leftBumper().getAsBoolean() ? 0.5 : 1.0)) 
-                                                            .withControllerRotationAxis(driverXbox::getRightX)
+                                                            .withControllerRotationAxis(() -> -driverXbox.getRightX())
                                                             .deadband(OperatorConstants.DEADBAND)
                                                             .scaleTranslation(0.8)
                                                             .allianceRelativeControl(true);
@@ -164,7 +164,7 @@ public class RobotContainer
 
       // DRIVER CONTROL
       driverXbox.a().onTrue((Commands.runOnce(drivebase::zeroGyro)));
-      driverXbox.b().whileTrue(drivebase.aimAtTagTeleopCommand(driverXbox, camera, 1));
+      driverXbox.b().whileTrue(drivebase.aimAtBestTagTeleopCommand(driverXbox, camera));
       driverXbox.rightBumper().whileTrue(Commands.runOnce(drivebase::lock, drivebase).repeatedly());
       // CO-DRIVER CONTROL
       coDriverXbox.povUp().whileTrue(Commands.run(() -> intake.raise(4), intake)).onFalse(Commands.runOnce(() -> intake.stopArm(), intake));
@@ -188,7 +188,7 @@ public class RobotContainer
   {
     // Pass in the selected auto from the SmartDashboard as our desired autnomous commmand 
     //return autoChooser.getSelected();
-    return drivebase.getAutonomousCommand("New Auto");
+    return drivebase.getAutonomousCommand("New New Auto");
   }
 
   public void setMotorBrake(boolean brake)

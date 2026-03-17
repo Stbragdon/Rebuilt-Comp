@@ -6,17 +6,13 @@ import org.photonvision.PhotonCamera;
 import org.photonvision.targeting.PhotonTrackedTarget;
 
 import com.revrobotics.PersistMode;
-import com.revrobotics.RelativeEncoder;
 import com.revrobotics.ResetMode;
 import com.revrobotics.spark.SparkLowLevel.MotorType;
 import com.revrobotics.spark.SparkFlex;
-import com.revrobotics.spark.SparkMax;
 import com.revrobotics.spark.config.EncoderConfig;
 import com.revrobotics.spark.config.SparkMaxConfig;
 
 import edu.wpi.first.math.util.Units;
-import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
@@ -46,13 +42,12 @@ public class Shooter extends SubsystemBase {
     // ===== Vision =====
     private final PhotonCamera camera = new PhotonCamera("Target");
 
-    // Change this to the actual AprilTag ID you want to shoot from
-    private static final int HUB_TAG_ID = 1;
+    // ✅ MULTI-TAG SET (same as drive)
+    private static final int[] HUB_TAG_IDS = {8, 10, 11, 24, 26, 27};
 
     // ===== Hardware =====
     private final SparkFlex shooterMotor = new SparkFlex(SHOOTER_CAN_ID, MotorType.kBrushless);
     private final SparkFlex kickerMotor = new SparkFlex(KICKER_CAN_ID, MotorType.kBrushless);
-    
 
     // ===== Constants =====
     private static final double KICKER_FEED_VOLTS = 8.0;
@@ -132,48 +127,53 @@ public class Shooter extends SubsystemBase {
         stopKicker();
     }
 
-    // ===== Vision / Distance =====
+    // ===== Vision (BEST TAG SELECTION) =====
 
-    public double getDistanceFromAprilTag(int tagId) {
+    public double getDistanceFromBestTag(int[] validTagIds) {
         var result = camera.getLatestResult();
 
         if (!result.hasTargets()) {
             return -1.0;
         }
 
-        for (PhotonTrackedTarget target : result.getTargets()) {
-            if (target.getFiducialId() == tagId) {
-                double distanceMeters =
-                    target.getBestCameraToTarget().getTranslation().getNorm();
+        PhotonTrackedTarget bestTarget = null;
+        double bestScore = Double.MAX_VALUE;
 
-                return Units.metersToFeet(distanceMeters);
+        for (PhotonTrackedTarget target : result.getTargets()) {
+
+            int id = target.getFiducialId();
+
+            for (int validId : validTagIds) {
+                if (id == validId) {
+
+                    double score = Math.abs(target.getYaw());
+
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestTarget = target;
+                    }
+
+                    break;
+                }
             }
+        }
+
+        if (bestTarget != null) {
+            double distanceMeters =
+                bestTarget.getBestCameraToTarget().getTranslation().getNorm();
+
+            return Units.metersToFeet(distanceMeters);
         }
 
         return -1.0;
     }
 
-    private int getHubTagID() {
-    var alliance = DriverStation.getAlliance();
-
-    if (alliance.isPresent()) {
-        if (alliance.get() == Alliance.Red) {
-            return 7;
-        } else {
-            return 25;
-        }
-    }
-
-    // fallback if DS hasn't reported alliance yet
-    return 7;
-}
-
     public double getHubDistanceFeet() {
-        return getDistanceFromAprilTag(HUB_TAG_ID);
+        return getDistanceFromBestTag(HUB_TAG_IDS);
     }
 
     public boolean hasHubTag() {
-        return getDistanceFromAprilTag(HUB_TAG_ID) > 0;
+        return getHubDistanceFeet() > 0;
     }
 
     // ===== Shot Logic =====
@@ -206,24 +206,35 @@ public class Shooter extends SubsystemBase {
 
     public void applyAutoShotFromDistance() {
         double distanceFeet = getHubDistanceFeet();
-        Optional<ShotPreset> preset = getPresetForDistance(distanceFeet);
+        double voltage = getVoltageForDistance(distanceFeet);
 
-        if (preset.isPresent()) {
-            setShooterPreset(preset.get());
+        if (distanceFeet > 0) {
+            setShooter(voltage);
         } else {
             stopShooter();
         }
+    }
+
+    public double getVoltageForDistance(double distanceFeet) {
+        if (distanceFeet < 0) {
+            return 0.0;
+        }
+
+        double voltage = 0.233 * distanceFeet + 4.55;
+
+        return Math.max(0.0, Math.min(12.0, voltage));
     }
 
     @Override
     public void periodic() {
         double distanceFeet = getHubDistanceFeet();
         Optional<ShotPreset> currentPreset = getPresetForDistance(distanceFeet);
+
         SmartDashboard.putNumber("Distance To Hub Tag (ft)", distanceFeet);
         SmartDashboard.putBoolean("Close Ready", inRange(distanceFeet, ShotPreset.CLOSE));
         SmartDashboard.putBoolean("Mid Ready", inRange(distanceFeet, ShotPreset.MID));
         SmartDashboard.putBoolean("Far Ready", inRange(distanceFeet, ShotPreset.FAR));
-        
+
         if (currentPreset.isPresent()) {
             SmartDashboard.putString("Active Shot Preset", currentPreset.get().name());
             SmartDashboard.putNumber("Suggested Shooter Volts", currentPreset.get().volts);

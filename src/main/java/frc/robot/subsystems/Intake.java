@@ -1,6 +1,7 @@
 package frc.robot.subsystems;
 
 import com.revrobotics.spark.SparkBase;
+import com.revrobotics.spark.SparkFlex;
 import com.revrobotics.spark.SparkLowLevel.MotorType;
 import com.revrobotics.spark.SparkMax;
 import com.revrobotics.spark.config.SparkBaseConfig;
@@ -16,12 +17,12 @@ public class Intake extends SubsystemBase {
     private static final int ROLLER_CAN_ID = 30;   // spins intake roller
 
     // motors
-    private final SparkMax armMotor;
-    private final SparkMax rollerMotor;
+    private final SparkFlex armMotor;
+    private final SparkFlex rollerMotor;
 
     public Intake() {
-        armMotor = new SparkMax(ARM_CAN_ID, MotorType.kBrushless);
-        rollerMotor = new SparkMax(ROLLER_CAN_ID, MotorType.kBrushless);
+        armMotor = new SparkFlex(ARM_CAN_ID, MotorType.kBrushless);
+        rollerMotor = new SparkFlex(ROLLER_CAN_ID, MotorType.kBrushless);
 
         // --- Arm motor config ---
         SparkMaxConfig armConfig = new SparkMaxConfig();
