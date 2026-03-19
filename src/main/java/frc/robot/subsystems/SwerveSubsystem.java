@@ -28,6 +28,7 @@ import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
+import edu.wpi.first.wpilibj2.command.RunCommand;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Config;
@@ -811,62 +812,65 @@ public Command aimAtBestTagTeleopCommand(
     }).withName("AimAtBestTagTeleop");
 }
 
-/**
-* Auto / PathPlanner command that ONLY aims at a tag (no driving forward).
-*
-* @param camera PhotonCamera to use
-* @param tagId  AprilTag ID to aim at
-* NEEDS TUNING
-*/
-public Command aimAtTagCommand(PhotonCamera camera, int tagId) {
+public Command aimAtBestTagAutoCommand(PhotonCamera camera) {
+    return new RunCommand(() -> {
 
-return Commands.run(() -> {
+        double turn = 0.0;
 
-  double turn = 0.0;
-  boolean targetVisible = false;
-  double targetYawDeg = 0.0;
+        boolean targetVisible = false;
+        double targetYawDeg = 0.0;
 
-  // ---- Get vision results ----
-  var results = camera.getAllUnreadResults();
-  if (!results.isEmpty()) {
-      var result = results.get(results.size() - 1); // latest frame
-      if (result.hasTargets()) {
-          for (PhotonTrackedTarget target : result.getTargets()) {
-              if (target.getFiducialId() == tagId) {
-                  targetYawDeg = target.getYaw();
-                  targetVisible = true;
-                  break;
-              }
-          }
-      }
-  }
+        int[] validTags = {8, 10, 11, 24, 26, 27};
 
-  // Save for .until(...)
-  aimTargetVisible = targetVisible;
-  aimTargetYawDeg  = targetYawDeg;
+        var results = camera.getAllUnreadResults();
+        if (!results.isEmpty()) {
+            var result = results.get(results.size() - 1);
 
-  // ---- Rotation-only P controller ----
-  if (targetVisible && Math.abs(targetYawDeg) > 1.5) {
-      double turnCommand = targetYawDeg * 0.015;
-      turnCommand = MathUtil.clamp(turnCommand, -1.0, 1.0);
-      turn = turnCommand * Constants.MAX_ANGULAR_VELOCITY;
-  } else {
-      turn = 0.0; // Close enough or no target
-  }
+            if (result.hasTargets()) {
 
-  // ---- Drive rotation only, no translation ----
-  Translation2d translation = new Translation2d(0.0, 0.0);
-  boolean fieldRelative = false; // robot-relative turn
+                PhotonTrackedTarget bestTarget = null;
+                double bestScore = Double.MAX_VALUE;
 
-  drive(translation, turn, fieldRelative);
+                for (PhotonTrackedTarget t : result.getTargets()) {
+                    int id = t.getFiducialId();
 
-  // Debug (optional)
-  SmartDashboard.putBoolean("AimAtTag Visible", targetVisible);
-  SmartDashboard.putNumber("AimAtTag Yaw", targetYawDeg);
+                    for (int validId : validTags) {
+                        if (id == validId) {
+                            double score = Math.abs(t.getYaw());
 
-}, this)
-.until(() -> aimTargetVisible && Math.abs(aimTargetYawDeg) < 1.5)
-.withTimeout(2.0)   // safety timeout
-.withName("AimAtTag_" + tagId);
+                            if (score < bestScore) {
+                                bestScore = score;
+                                bestTarget = t;
+                            }
+                        }
+                    }
+                }
+
+                if (bestTarget != null) {
+                    targetYawDeg = bestTarget.getYaw();
+                    targetVisible = true;
+                }
+            }
+        }
+
+        final double kP = 0.012;
+        final double yawDeadband = 1.5;
+
+        if (targetVisible && Math.abs(targetYawDeg) > yawDeadband) {
+            double turnCmd = targetYawDeg * kP;
+            turnCmd = MathUtil.clamp(turnCmd, -1.0, 1.0);
+            turn = turnCmd * Constants.MAX_ANGULAR_VELOCITY;
+        } else {
+            turn = 0;
+        }
+
+        // No translation in auto (just aim)
+        drive(
+            new Translation2d(0, 0),
+            -turn,
+            false
+        );
+
+    }, this).withName("AimAtBestTagAuto");
 }
 }

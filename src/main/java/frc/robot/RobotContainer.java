@@ -116,9 +116,13 @@ public class RobotContainer
     
     //Create the NamedCommands that will be used in PathPlanner
     NamedCommands.registerCommand("ArmUp",intake.raiseCommand(4).withTimeout(0.5));
-    NamedCommands.registerCommand("ArmDown",intake.lowerCommand(4).withTimeout(0.5));
-    NamedCommands.registerCommand("IntakeOn",intake.intakeCommand(6).withTimeout(10.0));
+    NamedCommands.registerCommand("ArmDown",intake.lowerCommand(4).withTimeout(1));
+    NamedCommands.registerCommand("IntakeOn",intake.intakeCommand(8));
     NamedCommands.registerCommand("StopIntake",intake.stopCommand());
+    NamedCommands.registerCommand("AutoShoot",shooter.applyAutoShotFromDistanceCommand().withTimeout(10));
+    NamedCommands.registerCommand("AimAtTag",drivebase.aimAtBestTagAutoCommand(camera).withTimeout(1.5) // VERY important
+);
+   
     
 
     //Have the autoChooser pull in all PathPlanner autos as options
@@ -172,7 +176,7 @@ public class RobotContainer
       coDriverXbox.rightTrigger(0.2).whileTrue(Commands.run(() -> intake.intake(12), intake)).onFalse(Commands.runOnce(() -> intake.stopRoller(), intake));
       coDriverXbox.rightBumper().whileTrue(Commands.run(() -> shooter.runKicker(5), shooter)).onFalse(Commands.runOnce(() -> shooter.stopKicker(), shooter));
       coDriverXbox.a().whileTrue(Commands.run(() -> shooter.applyAutoShotFromDistance(), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));
-      coDriverXbox.y().whileTrue(Commands.run(() -> shooter.setShooter(5.5), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));;
+      coDriverXbox.y().whileTrue(Commands.run(() -> shooter.setShooter(6.7), shooter)).onFalse(Commands.runOnce(() -> shooter.stopShooter(), shooter));;
       
       
     

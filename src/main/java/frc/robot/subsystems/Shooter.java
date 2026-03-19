@@ -14,6 +14,8 @@ import com.revrobotics.spark.config.SparkMaxConfig;
 
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.RunCommand;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 public class Shooter extends SubsystemBase {
@@ -213,6 +215,20 @@ public class Shooter extends SubsystemBase {
         } else {
             stopShooter();
         }
+    }
+
+    // Pathplanner command
+    public Command applyAutoShotFromDistanceCommand() {
+    return new RunCommand(() -> {
+        double distanceFeet = getHubDistanceFeet();
+        double voltage = getVoltageForDistance(distanceFeet);
+
+        if (distanceFeet > 0) {
+            setShooter(voltage);
+        } else {
+            stopShooter();
+        }
+    }, this);
     }
 
     public double getVoltageForDistance(double distanceFeet) {
